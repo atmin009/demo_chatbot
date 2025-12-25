@@ -27,10 +27,18 @@ def init_connections():
     # Connect Gemini
     genai.configure(api_key=GEMINI_KEY)
     
-    # ---------------------------------------------------------
-    # 🛠️ แก้ไข: ล็อกเป้าใช้ gemini-1.5-flash (โควต้าเยอะ)
-    # ---------------------------------------------------------
-    model_name = 'gemini-1.5-flash-001' 
+    # Auto-detect โมเดล Flash ที่ใช้ได้
+    model_name = 'gemini-1.5-flash'  # Default
+    try:
+        for m in genai.list_models():
+            if 'generateContent' in m.supported_generation_methods:
+                if 'flash' in m.name.lower():
+                    model_name = m.name.replace("models/", "")
+                    if '1.5' in m.name: 
+                        break
+    except Exception as e:
+        st.warning(f"⚠️ ไม่สามารถหาโมเดล Flash ได้ ใช้ default: {model_name}")
+    
     model = genai.GenerativeModel(model_name)
     
     # Connect Supabase
