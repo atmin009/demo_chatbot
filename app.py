@@ -27,18 +27,9 @@ def init_connections():
     # Connect Gemini
     genai.configure(api_key=GEMINI_KEY)
     
-    # Auto-detect โมเดล Flash ที่ใช้ได้
-    model_name = 'gemini-1.5-flash'  # Default
-    try:
-        for m in genai.list_models():
-            if 'generateContent' in m.supported_generation_methods:
-                if 'flash' in m.name.lower():
-                    model_name = m.name.replace("models/", "")
-                    if '1.5' in m.name: 
-                        break
-    except Exception as e:
-        st.warning(f"⚠️ ไม่สามารถหาโมเดล Flash ได้ ใช้ default: {model_name}")
-    
+    # กำหนดใช้ gemini-1.5-flash โดยตรง (ไม่ auto-detect เพื่อหลีกเลี่ยง gemini-3-flash)
+    # gemini-1.5-flash มี quota มากกว่าและเสถียรกว่า
+    model_name = 'gemini-1.5-flash'
     model = genai.GenerativeModel(model_name)
     
     # Connect Supabase
@@ -98,7 +89,24 @@ def get_focus_response(user_input, history_text):
         response = model.generate_content(final_prompt)
         return response.text
     except Exception as e:
-        return f"ระบบขัดข้อง: {e}"
+        error_msg = str(e)
+        
+        # จัดการ quota exceeded (429)
+        if "429" in error_msg or "quota" in error_msg.lower() or "exceeded" in error_msg.lower():
+            return """😅 ขอโทษนะคะ ตอนนี้ระบบมีผู้ใช้งานเยอะมาก ทำให้ quota หมดชั่วคราวค่ะ 
+            
+**วิธีแก้:**
+- รอสักครู่แล้วลองใหม่ (ประมาณ 1-2 นาที)
+- หรือลองใหม่ในวันพรุ่งนี้ (quota จะ reset ทุกวัน)
+
+ถ้าต้องการใช้งานต่อเนื่อง แนะนำให้อัปเกรดเป็น paid plan ของ Google Gemini API ค่ะ
+
+ขอบคุณที่เข้าใจนะคะ 🙏"""
+        
+        # จัดการ error อื่นๆ
+        return f"""⚠️ เกิดข้อผิดพลาดในระบบ: {error_msg}
+
+กรุณาลองใหม่อีกครั้ง หรือติดต่อทีมสนับสนุนค่ะ"""
 
 # 4. UI
 st.title("🛡️ น้องโฟกัส (AI Assistant)")
