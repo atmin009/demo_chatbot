@@ -27,10 +27,70 @@ def init_connections():
     # Connect Gemini
     genai.configure(api_key=GEMINI_KEY)
     
-    # กำหนดใช้ gemini-1.5-flash โดยตรง (ไม่ auto-detect เพื่อหลีกเลี่ยง gemini-3-flash)
-    # gemini-1.5-flash มี quota มากกว่าและเสถียรกว่า
-    model_name = 'gemini-1.5-flash'
-    model = genai.GenerativeModel(model_name)
+    # Auto-detect โมเดล Flash ที่ใช้ได้ (เหมือนใน main.py)
+    # แต่เลือกเฉพาะ 1.5-flash เพื่อหลีกเลี่ยง gemini-3-flash ที่มี quota น้อย
+    model_name = None
+    try:
+        # ลองหา 1.5-flash ก่อน (quota มากกว่า)
+        for m in genai.list_models():
+            if 'generateContent' in m.supported_generation_methods:
+                if 'flash' in m.name.lower() and '1.5' in m.name.lower():
+                    model_name = m.name.replace("models/", "")
+                    break
+        
+        # ถ้าไม่เจอ 1.5-flash ลองหา flash ตัวอื่น (แต่ไม่เอา 3-flash)
+        if not model_name:
+            for m in genai.list_models():
+                if 'generateContent' in m.supported_generation_methods:
+                    if 'flash' in m.name.lower() and '3' not in m.name.lower():
+                        model_name = m.name.replace("models/", "")
+                        break
+        
+        # ถ้ายังไม่เจอ ลองใช้ gemini-pro หรือ gemini-1.5-pro
+        if not model_name:
+            for m in genai.list_models():
+                if 'generateContent' in m.supported_generation_methods:
+                    if 'pro' in m.name.lower() and '1.5' in m.name.lower():
+                        model_name = m.name.replace("models/", "")
+                        break
+            
+    except Exception as e:
+        # ถ้า list_models() ไม่ได้ ใช้ default
+        model_name = 'gemini-1.5-flash'
+        st.warning(f"⚠️ ไม่สามารถหาโมเดลได้ ใช้ default: {model_name}")
+    
+    # ถ้ายังไม่เจอเลย ใช้ default
+    if not model_name:
+        model_name = 'gemini-1.5-flash'
+    
+    # สร้างโมเดล (ถ้า error จะจัดการใน get_focus_response)
+    try:
+        model = genai.GenerativeModel(model_name)
+    except Exception as e:
+        # ถ้าโมเดลที่เลือกใช้ไม่ได้ ลองหาโมเดลอื่นที่ใช้ได้
+        st.warning(f"⚠️ โมเดล {model_name} ใช้ไม่ได้ กำลังหาโมเดลอื่น...")
+        model = None
+        try:
+            for m in genai.list_models():
+                if 'generateContent' in m.supported_generation_methods:
+                    try:
+                        model = genai.GenerativeModel(m.name.replace("models/", ""))
+                        model_name = m.name.replace("models/", "")
+                        break
+                    except:
+                        continue
+        except:
+            pass
+        
+        # ถ้ายังไม่ได้ ให้ใช้ default อีกครั้ง
+        if model is None:
+            try:
+                model = genai.GenerativeModel('gemini-1.5-flash')
+                model_name = 'gemini-1.5-flash'
+            except:
+                # ถ้ายังไม่ได้เลย ให้ใช้ gemini-pro
+                model = genai.GenerativeModel('gemini-pro')
+                model_name = 'gemini-pro'
     
     # Connect Supabase
     supabase = create_client(SUPA_URL, SUPA_KEY)
@@ -103,6 +163,18 @@ def get_focus_response(user_input, history_text):
 
 ขอบคุณที่เข้าใจนะคะ 🙏"""
         
+        # จัดการ model not found (404)
+        if "404" in error_msg or "not found" in error_msg.lower() or "not supported" in error_msg.lower():
+            return """⚠️ ไม่พบโมเดลที่ต้องการใช้งาน
+
+**สาเหตุ:** โมเดลที่เลือกอาจไม่พร้อมใช้งานใน API version นี้
+
+**วิธีแก้:**
+- ระบบจะพยายามหาโมเดลอื่นที่ใช้ได้อัตโนมัติ
+- หรือลอง refresh หน้าเว็บใหม่
+
+ถ้ายังมีปัญหา กรุณาติดต่อทีมสนับสนุนค่ะ"""
+        
         # จัดการ error อื่นๆ
         return f"""⚠️ เกิดข้อผิดพลาดในระบบ: {error_msg}
 
@@ -114,7 +186,7 @@ st.caption(f"Model: {active_model_name} | Powered by Supabase")
 
 if "messages" not in st.session_state:
     st.session_state.messages = [
-        {"role": "assistant", "content": "สวัสดีครับ! น้องโฟกัสยินดีให้บริการ กำลังมองหาฟิล์มรุ่นไหนอยู่ครับ? 😊"}
+        {"role": "assistant", "content": "สวัสดีครับ! น้องโฟกัสยินดีให้บริการ กำลังมองหาฟิล์มรุ่นไหนอยู่ค่ะ? 😊"}
     ]
 
 for msg in st.session_state.messages:
