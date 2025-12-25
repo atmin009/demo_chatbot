@@ -30,7 +30,7 @@ def init_connections():
     # ---------------------------------------------------------
     # 🛠️ แก้ไข: ล็อกเป้าใช้ gemini-1.5-flash (โควต้าเยอะ)
     # ---------------------------------------------------------
-    model_name = 'gemini-1.5-flash' 
+    model_name = 'gemini-1.5-flash-001' 
     model = genai.GenerativeModel(model_name)
     
     # Connect Supabase
